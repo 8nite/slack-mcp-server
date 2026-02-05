@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -54,6 +55,7 @@ type Message struct {
 	FileCount int    `json:"fileCount,omitempty"`
 	AttachmentIDs   string `json:"attachmentIDs,omitempty"`
 	HasMedia  bool   `json:"hasMedia,omitempty"`
+	Images    string `json:"images,omitempty" csv:"images"`
 	Cursor    string `json:"cursor"`
 }
 
@@ -248,7 +250,7 @@ func (ch *ConversationsHandler) ConversationsAddMessageHandler(ctx context.Conte
 	}
 	ch.logger.Debug("Fetched conversation history", zap.Int("message_count", len(history.Messages)))
 
-	messages := ch.convertMessagesFromHistory(history.Messages, historyParams.ChannelID, false)
+	messages := ch.convertMessagesFromHistory(history.Messages, historyParams.ChannelID, false, ch.apiProvider.ProvideUsersMap())
 	return marshalMessagesToCSV(messages)
 }
 
@@ -441,7 +443,7 @@ func (ch *ConversationsHandler) ConversationsHistoryHandler(ctx context.Context,
 
 	ch.logger.Debug("Fetched conversation history", zap.Int("message_count", len(history.Messages)))
 
-	messages := ch.convertMessagesFromHistory(history.Messages, params.channel, params.activity)
+	messages := ch.convertMessagesFromHistory(history.Messages, params.channel, params.activity, ch.apiProvider.ProvideUsersMap())
 
 	if len(messages) > 0 && history.HasMore {
 		messages[len(messages)-1].Cursor = history.ResponseMetaData.NextCursor
@@ -480,7 +482,7 @@ func (ch *ConversationsHandler) ConversationsRepliesHandler(ctx context.Context,
 	}
 	ch.logger.Debug("Fetched conversation replies", zap.Int("count", len(replies)))
 
-	messages := ch.convertMessagesFromHistory(replies, params.channel, params.activity)
+	messages := ch.convertMessagesFromHistory(replies, params.channel, params.activity, ch.apiProvider.ProvideUsersMap())
 	if len(messages) > 0 && hasMore {
 		messages[len(messages)-1].Cursor = nextCursor
 	}
@@ -511,7 +513,7 @@ func (ch *ConversationsHandler) ConversationsSearchHandler(ctx context.Context, 
 	}
 	ch.logger.Debug("Search completed", zap.Int("matches", len(messagesRes.Matches)))
 
-	messages := ch.convertMessagesFromSearch(messagesRes.Matches)
+	messages := ch.convertMessagesFromSearch(messagesRes.Matches, ch.apiProvider.ProvideUsersMap())
 	if len(messages) > 0 && messagesRes.Pagination.Page < messagesRes.Pagination.PageCount {
 		nextCursor := fmt.Sprintf("page:%d", messagesRes.Pagination.Page+1)
 		messages[len(messages)-1].Cursor = base64.StdEncoding.EncodeToString([]byte(nextCursor))
@@ -593,8 +595,7 @@ func (ch *ConversationsHandler) resolveChannelID(ctx context.Context, channel st
 	return channelsMaps.Channels[chn].ID, nil
 }
 
-func (ch *ConversationsHandler) convertMessagesFromHistory(slackMessages []slack.Message, channel string, includeActivity bool) []Message {
-	usersMap := ch.apiProvider.ProvideUsersMap()
+func (ch *ConversationsHandler) convertMessagesFromHistory(slackMessages []slack.Message, channel string, includeActivity bool, usersMap *provider.UsersCache) []Message {
 	var messages []Message
 	warn := false
 
@@ -636,10 +637,30 @@ func (ch *ConversationsHandler) convertMessagesFromHistory(slackMessages []slack
 		hasMedia := fileCount > 0 || hasImageBlocks(msg.Blocks)
 
 		var attachmentIDs []string
+		var imagesList []map[string]string
 		for _, f := range msg.Files {
 			attachmentIDs = append(attachmentIDs, f.ID)
+			if strings.HasPrefix(f.Mimetype, "image/") {
+				url := f.URLPrivateDownload
+				if url == "" {
+					url = f.URLPrivate
+				}
+				img := map[string]string{
+					"url":   url,
+					"title": f.Title,
+					"id":    f.ID,
+				}
+				imagesList = append(imagesList, img)
+			}
 		}
 		attachmentIDsStr := strings.Join(attachmentIDs, ",")
+
+		var imagesStr string
+		if len(imagesList) > 0 {
+			if b, err := json.Marshal(imagesList); err == nil {
+				imagesStr = string(b)
+			}
+		}
 
 		messages = append(messages, Message{
 			MsgID:     msg.Timestamp,
@@ -653,24 +674,26 @@ func (ch *ConversationsHandler) convertMessagesFromHistory(slackMessages []slack
 			Reactions: reactionsString,
 			BotName:   botName,
 			FileCount: fileCount,
-			AttachmentIDs:   attachmentIDsStr,
-			HasMedia:  hasMedia,
+			AttachmentIDs: attachmentIDsStr,
+			HasMedia:      hasMedia,
+			Images:        imagesStr,
 		})
 	}
 
-	if ready, err := ch.apiProvider.IsReady(); !ready {
-		if warn && errors.Is(err, provider.ErrUsersNotReady) {
-			ch.logger.Warn(
-				"WARNING: Slack users sync is not ready yet, you may experience some limited functionality and see UIDs instead of resolved names as well as unable to query users by their @handles. Users sync is part of channels sync and operations on channels depend on users collection (IM, MPIM). Please wait until users are synced and try again",
-				zap.Error(err),
-			)
+	if ch.apiProvider != nil {
+		if ready, err := ch.apiProvider.IsReady(); !ready {
+			if warn && errors.Is(err, provider.ErrUsersNotReady) && ch.logger != nil {
+				ch.logger.Warn(
+					"WARNING: Slack users sync is not ready yet, you may experience some limited functionality and see UIDs instead of resolved names as well as unable to query users by their @handles. Users sync is part of channels sync and operations on channels depend on users collection (IM, MPIM). Please wait until users are synced and try again",
+					zap.Error(err),
+				)
+			}
 		}
 	}
 	return messages
 }
 
-func (ch *ConversationsHandler) convertMessagesFromSearch(slackMessages []slack.SearchMessage) []Message {
-	usersMap := ch.apiProvider.ProvideUsersMap()
+func (ch *ConversationsHandler) convertMessagesFromSearch(slackMessages []slack.SearchMessage, usersMap *provider.UsersCache) []Message {
 	var messages []Message
 	warn := false
 
@@ -695,6 +718,14 @@ func (ch *ConversationsHandler) convertMessagesFromSearch(slackMessages []slack.
 
 		hasMedia := hasImageBlocks(msg.Blocks)
 
+		// Search messages don't always have full file objects in the same way, but let's check parsing if available
+		// Note provided slack.SearchMessage structure might differ. 
+		// For now we just add empty images for search or we'd need to inspect how search returns files.
+		// slack.SearchMessage doesn't have Files slice directly exposed in the same way as Message in all versions, 
+		// but let's assume for now we keep it simple or check if we can extract.
+		// Based on `slack-go` SearchMessage struct, it doesn't seem to have Files. 
+		// So we will leave Images empty for search for now unless we find otherwise.
+		
 		messages = append(messages, Message{
 			MsgID:     msg.Timestamp,
 			UserID:    msg.User,
@@ -706,15 +737,18 @@ func (ch *ConversationsHandler) convertMessagesFromSearch(slackMessages []slack.
 			Time:      timestamp,
 			Reactions: "",
 			HasMedia:  hasMedia,
+			Images:    "", // Not easily available in search results
 		})
 	}
 
-	if ready, err := ch.apiProvider.IsReady(); !ready {
-		if warn && errors.Is(err, provider.ErrUsersNotReady) {
-			ch.logger.Warn(
-				"Slack users sync not ready; you may see raw UIDs instead of names and lose some functionality.",
-				zap.Error(err),
-			)
+	if ch.apiProvider != nil {
+		if ready, err := ch.apiProvider.IsReady(); !ready {
+			if warn && errors.Is(err, provider.ErrUsersNotReady) && ch.logger != nil {
+				ch.logger.Warn(
+					"Slack users sync not ready; you may see raw UIDs instead of names and lose some functionality.",
+					zap.Error(err),
+				)
+			}
 		}
 	}
 	return messages
