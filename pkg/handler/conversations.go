@@ -42,21 +42,21 @@ var validFilterKeys = map[string]struct{}{
 }
 
 type Message struct {
-	MsgID     string `json:"msgID"`
-	UserID    string `json:"userID"`
-	UserName  string `json:"userUser"`
-	RealName  string `json:"realName"`
-	Channel   string `json:"channelID"`
-	ThreadTs  string `json:"ThreadTs"`
-	Text      string `json:"text"`
-	Time      string `json:"time"`
-	Reactions string `json:"reactions,omitempty"`
-	BotName   string `json:"botName,omitempty"`
-	FileCount int    `json:"fileCount,omitempty"`
-	AttachmentIDs   string `json:"attachmentIDs,omitempty"`
-	HasMedia  bool   `json:"hasMedia,omitempty"`
-	Images    string `json:"images,omitempty" csv:"images"`
-	Cursor    string `json:"cursor"`
+	MsgID         string `json:"msgID"`
+	UserID        string `json:"userID"`
+	UserName      string `json:"userUser"`
+	RealName      string `json:"realName"`
+	Channel       string `json:"channelID"`
+	ThreadTs      string `json:"ThreadTs"`
+	Text          string `json:"text"`
+	Time          string `json:"time"`
+	Reactions     string `json:"reactions,omitempty"`
+	BotName       string `json:"botName,omitempty"`
+	FileCount     int    `json:"fileCount,omitempty"`
+	AttachmentIDs string `json:"attachmentIDs,omitempty"`
+	HasMedia      bool   `json:"hasMedia,omitempty"`
+	Images        string `json:"images,omitempty" csv:"images"`
+	Cursor        string `json:"cursor"`
 }
 
 type User struct {
@@ -663,17 +663,17 @@ func (ch *ConversationsHandler) convertMessagesFromHistory(slackMessages []slack
 		}
 
 		messages = append(messages, Message{
-			MsgID:     msg.Timestamp,
-			UserID:    msg.User,
-			UserName:  userName,
-			RealName:  realName,
-			Text:      text.ProcessText(msgText),
-			Channel:   channel,
-			ThreadTs:  msg.ThreadTimestamp,
-			Time:      timestamp,
-			Reactions: reactionsString,
-			BotName:   botName,
-			FileCount: fileCount,
+			MsgID:         msg.Timestamp,
+			UserID:        msg.User,
+			UserName:      userName,
+			RealName:      realName,
+			Text:          text.ProcessText(msgText),
+			Channel:       channel,
+			ThreadTs:      msg.ThreadTimestamp,
+			Time:          timestamp,
+			Reactions:     reactionsString,
+			BotName:       botName,
+			FileCount:     fileCount,
 			AttachmentIDs: attachmentIDsStr,
 			HasMedia:      hasMedia,
 			Images:        imagesStr,
@@ -719,13 +719,13 @@ func (ch *ConversationsHandler) convertMessagesFromSearch(slackMessages []slack.
 		hasMedia := hasImageBlocks(msg.Blocks)
 
 		// Search messages don't always have full file objects in the same way, but let's check parsing if available
-		// Note provided slack.SearchMessage structure might differ. 
+		// Note provided slack.SearchMessage structure might differ.
 		// For now we just add empty images for search or we'd need to inspect how search returns files.
-		// slack.SearchMessage doesn't have Files slice directly exposed in the same way as Message in all versions, 
+		// slack.SearchMessage doesn't have Files slice directly exposed in the same way as Message in all versions,
 		// but let's assume for now we keep it simple or check if we can extract.
-		// Based on `slack-go` SearchMessage struct, it doesn't seem to have Files. 
+		// Based on `slack-go` SearchMessage struct, it doesn't seem to have Files.
 		// So we will leave Images empty for search for now unless we find otherwise.
-		
+
 		messages = append(messages, Message{
 			MsgID:     msg.Timestamp,
 			UserID:    msg.User,

@@ -14,11 +14,29 @@ function checkGoAvailability() {
 }
 
 (async () => {
+    // Check for pre-built binary first
+    const binaryName = process.platform === 'win32' ? 'slack-mcp-server.exe' : 'slack-mcp-server';
+    const binaryPath = path.resolve(__dirname, '..', 'build', binaryName);
+
+    if (fs.existsSync(binaryPath)) {
+        // console.error(`Found pre-built binary at ${binaryPath}`);
+        const child = spawn(binaryPath, process.argv.slice(2), {
+            stdio: 'inherit',
+            shell: false
+        });
+
+        child.on('exit', (code) => {
+            process.exit(code);
+        });
+        return;
+    }
+
     const hasGo = await checkGoAvailability();
     if (!hasGo) {
         console.error('Error: "go" command not found in PATH.');
         console.error('To run this server via npx without pre-compiled binaries, you must have Go installed.');
         console.error('Install Go from https://go.dev/dl/');
+        console.error('Or run "make build" if you have Go installed elsewhere to create a binary.');
         process.exit(1);
     }
 
