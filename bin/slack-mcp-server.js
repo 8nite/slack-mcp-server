@@ -40,17 +40,18 @@ function checkGoAvailability() {
         process.exit(1);
     }
 
-    // Locate the Go entry point relative to this script
-    // This script is in /bin, so we go up one level to root, then into cmd/slack-mcp-server
-    const goFile = path.join(__dirname, '..', 'cmd', 'slack-mcp-server', 'main.go');
+    // Locate the project root (where go.mod is)
+    const projectRoot = path.resolve(__dirname, '..');
 
-    const args = ['run', goFile, ...process.argv.slice(2)];
+    // Use the Go package path, not the file path
+    const args = ['run', './cmd/slack-mcp-server', ...process.argv.slice(2)];
 
-    // console.error(`Running: go ${args.join(' ')}`);
+    // console.error(`Running: go ${args.join(' ')} from ${projectRoot}`);
 
     const child = spawn('go', args, {
         stdio: 'inherit',
-        shell: true 
+        shell: true,
+        cwd: projectRoot
     });
 
     child.on('exit', (code) => {
