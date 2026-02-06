@@ -1,5 +1,5 @@
 {
-  "name": "slack-mcp-server",
+  "name": "@8nite/slack-mcp-server",
   "version": "1.1.0",
   "description": "Model Context Protocol (MCP) server for Slack Workspaces. This integration supports both Stdio and SSE transports, proxy settings and does not require any permissions or bots being created or approved by Workspace admins",
   "main": "bin/index.js",
@@ -7,12 +7,12 @@
     "slack-mcp-server": "bin/index.js"
   },
   "optionalDependencies": {
-    "slack-mcp-server-darwin-amd64": "1.1.0",
-    "slack-mcp-server-darwin-arm64": "1.1.0",
-    "slack-mcp-server-linux-amd64": "1.1.0",
-    "slack-mcp-server-linux-arm64": "1.1.0",
-    "slack-mcp-server-windows-amd64": "1.1.0",
-    "slack-mcp-server-windows-arm64": "1.1.0"
+    "@8nite/slack-mcp-server-darwin-amd64": "1.1.0",
+    "@8nite/slack-mcp-server-darwin-arm64": "1.1.0",
+    "@8nite/slack-mcp-server-linux-amd64": "1.1.0",
+    "@8nite/slack-mcp-server-linux-arm64": "1.1.0",
+    "@8nite/slack-mcp-server-windows-amd64": "1.1.0",
+    "@8nite/slack-mcp-server-windows-arm64": "1.1.0"
   },
   "repository": {
     "type": "git",
